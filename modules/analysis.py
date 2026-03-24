@@ -51,6 +51,10 @@ def analyse_outliers(df: pd.DataFrame):
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
 
+        if lower_bound == upper_bound:
+            print(f"{column} -> 0 outliers (lower={lower_bound:.2f}, upper={upper_bound:.2f})")
+            continue
+
         outlier_mask = (num_df[column] < lower_bound) | (
             num_df[column] > upper_bound)
         print(

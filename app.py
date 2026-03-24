@@ -1,11 +1,7 @@
-import missingno as msno
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 from modules.analysis import analyse_dataset
 from modules.cleaning import clean_dataset
-from modules.reporting import print_cleaning_report
 
 
 def load_data(file_path: str) -> pd.DataFrame:
@@ -27,16 +23,14 @@ def main():
     # Analyse du dataset avant nettoyage
     analyse_dataset(df)
 
-    df_before = df.copy()
-
     # Clean dataframe
     clean_df = clean_dataset(df)
 
     # Save cleaned dataframe
     clean_df.to_csv("./data/cleaned.csv", index=False)
 
-    # Reporting
-    print_cleaning_report(df_before, clean_df)
+    # Analyse du dataset après nettoyage
+    analyse_dataset(clean_df)
 
 
 if __name__ == "__main__":
