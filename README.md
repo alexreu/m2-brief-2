@@ -1,44 +1,119 @@
-## Partie 1 - Analyse exploratoire rapide
+## Objectif
 
-Ce premier passage sur le dataset sert a mesurer son etat avant nettoyage.
+Le projet produit deux versions du dataset `data/raw.csv` :
 
-- Le jeu de donnees contient `10 000` lignes et `9` colonnes numeriques.
-- Les colonnes les plus incompletes sont `score_credit` (`53.06%`), `historique_credits` (`52.93%`) et `loyer_mensuel` (`29.06%`).
-- Aucune colonne ne depasse `80%` de valeurs manquantes, mais deux colonnes depassent `50%`, ce qui les rend deja fragiles pour la suite.
-- `8 446` lignes ont au moins une valeur manquante. Les lignes les plus degradees montent a `33.33%` de valeurs manquantes, soit `3` champs vides sur `9`.
-- Les boxplots et la detection par IQR montrent des valeurs atypiques sur `taille`, `poids`, `revenu_estime_mois` et `montant_pret`.
-- Une anomalie evidente apparait sur `loyer_mensuel`, avec des valeurs negatives, peu coherentes metier.
-- Les histogrammes confirment des distributions heterogenes selon les variables.
-- La matrice de correlation montre peu de relations lineaires fortes. Le lien le plus visible reste celui entre `revenu_estime_mois` et `montant_pret`, mais il reste faible.
+- `data/cleaned.csv` : version nettoyee techniquement ;
+- `data/ethical_cleaned.csv` : version nettoyee puis reduite selon des choix ethiques.
 
-En clair, le dataset est exploitable, mais il demande un travail de nettoyage avant toute utilisation dans un modele.
+L'idee est de corriger les problemes de qualite de donnees tout en limitant l'usage de variables sensibles dans un contexte proche d'une decision automatisee.
 
-## Partie 2 - Nettoyage
+## Structure du dataset brut
 
-- Aucune colonne n'a ete supprimee pour cause de quasi-vide : aucune ne depasse `80%` de valeurs manquantes.
-- Les colonnes `poids` et `taille` sont retirees du jeu nettoye : ce sont des donnees personnelles, et leur utilite metier parait faible ici au regard de l'objectif et de la confidentialite.
-- Les `2%` de lignes les plus incompletes sont supprimees pour eviter d'imputer des observations trop degradees.
-- Les valeurs manifestement incoherentes sont converties en `NaN`, par exemple les `loyer_mensuel`, `revenu_estime_mois`, `montant_pret` ou `score_credit` negatifs.
-- Les outliers sont detectes avec la methode IQR puis capes aux bornes pour limiter leur impact sans perdre de lignes.
-- Les valeurs manquantes restantes sont imputees avec `KNNImputer` : chaque valeur manquante est estimee a partir des lignes les plus proches.
+Le jeu source contient `10000` lignes et `19` colonnes.
 
-L'idee generale est simple : supprimer le minimum, corriger ce qui est incoherent.
+- Variables numeriques : `age`, `taille`, `poids`, `revenu_estime_mois`, `historique_credits`, `risque_personnel`, `score_credit`, `loyer_mensuel`, `montant_pret`
+- Variables categorielles : `sexe`, `sport_licence`, `region`, `smoker`, `nationalité_francaise`, `situation_familiale`
+- Variable ordinale : `niveau_etude`
+- Variable temporelle : `date_creation_compte`
+- Identifiants directs : `nom`, `prenom`
 
-## Partie 3 - Documentation du traitement et analyse statistique avant/apres
+## Constats sur le dataset brut
 
-- Le nettoyage retire `200` lignes, soit `2%` du dataset, et fait passer le volume de `10 000` a `9 800` lignes.
-- Le dataset final passe aussi de `9` a `7` colonnes apres exclusion de `poids` et `taille` pour des raisons de minimisation des donnees.
-- Les valeurs manquantes passent de `13 505` a `0`. Les lignes incompletes passent de `8 446` a `0`.
-- Aucune autre colonne n'est supprimee : le seuil de quasi-vide (`80%`) n'est jamais atteint.
-- Les valeurs incoherentes sont converties en `NaN`, puis traitees comme des manquants pour garder une logique unique de correction.
-- Les outliers sont capes plutot que supprimes afin de conserver l'information tout en reduisant l'effet des valeurs extremes.
-- L'imputation KNN est retenue pour garder des valeurs plus proches des profils reels du dataset que ne le ferait une valeur unique comme la moyenne ou la mediane.
+Les principaux problemes observes sont les suivants :
 
-Sur le plan statistique, le nettoyage conserve les ordres de grandeur globaux des variables conservees, mais resserre leurs distributions.
+- beaucoup de valeurs manquantes, surtout dans `score_credit`, `historique_credits`, `loyer_mensuel` et `situation_familiale` ;
+- des valeurs incoherentes, notamment des `loyer_mensuel` negatifs ;
+- des valeurs extremes sur plusieurs colonnes numeriques ;
+- la presence de donnees personnelles ou sensibles (`nom`, `prenom`, `sexe`, `nationalité_francaise`, `smoker`, `taille`, `poids`).
 
-- `revenu_estime_mois` passe de `500 - 6826` a `500 - 5731.12`.
-- `montant_pret` passe de `500 - 53192.05` a `500 - 39817.46`.
-- `loyer_mensuel` n'a plus de valeur negative apres correction, avec un minimum a `8.51` au lieu de `-395.25`.
-- `score_credit` et `historique_credits` gardent une dispersion plus naturelle qu'avec une imputation fixe.
+## Pipeline de nettoyage technique
 
-Le dataset final est plus propre, plus sobre du point de vue des donnees personnelles et sans valeurs manquantes. Le nettoyage reste lisible, avec une seule methode d'imputation appliquee a l'ensemble des variables numeriques.
+Le nettoyage applique dans `modules/cleaning.py` suit les etapes suivantes.
+
+### 1. Standardisation des valeurs invalides
+
+Les marqueurs de valeurs manquantes (`?`, `NA`, `N/A`, `null`, `None`) sont convertis en `NaN`.
+
+Les valeurs negatives incoherentes sont aussi remplacees par `NaN` pour :
+
+- `loyer_mensuel`
+- `revenu_estime_mois`
+- `montant_pret`
+- `score_credit`
+
+Choix retenu : transformer ces anomalies en valeurs manquantes permet de les traiter proprement dans une logique unique d'imputation.
+
+### 2. Suppression des lignes les plus incompletes
+
+Les `2%` de lignes les plus degradees sont supprimees.
+
+Choix retenu : eviter d'imputer des lignes trop pauvres en information, tout en conservant l'essentiel du dataset.
+
+### 3. Preparation avant imputation
+
+Deux transformations sont appliquees avant l'imputation :
+
+- `date_creation_compte` est convertie en `anciennete_compte_jours` ;
+- `niveau_etude` est encodee selon un ordre logique :
+  - `aucun` -> `0`
+  - `bac` -> `1`
+  - `bac+2` -> `2`
+  - `bac+3` -> `3`
+  - `bac+4` -> `4`
+  - `master` -> `5`
+  - `doctorat` -> `6`
+
+Choix retenu : l'imputation fonctionne mieux sur des variables numeriques que sur des dates ou des niveaux textuels ordonnes.
+
+### 4. Traitement des outliers
+
+Les outliers sont detectes avec la methode IQR puis capes aux bornes inferieures et superieures.
+
+Choix retenu : on reduit l'impact des valeurs extremes sans supprimer davantage de lignes.
+
+### 5. Imputation des valeurs manquantes
+
+Deux strategies sont utilisees selon le type de colonne :
+
+- colonnes categorielles : `SimpleImputer(strategy="most_frequent")`
+- colonnes numeriques : `KNNImputer`
+
+Choix retenu :
+
+- la modalite la plus frequente est simple et lisible pour les colonnes texte ;
+- KNN permet une estimation plus proche des profils voisins pour les colonnes numeriques.
+
+### 6. Post-traitement apres imputation
+
+Certaines colonnes sont remises dans un format plus coherent :
+
+- `historique_credits` est arrondie puis bornee entre `0` et `5` ;
+- `niveau_etude` est arrondie, bornee, puis reconvertie en libelles ;
+- `anciennete_compte_jours` est arrondie et forcee a rester positive.
+
+Choix retenu : eviter des sorties absurdes comme des niveaux d'etude intermediaires ou des comptes d'anciennete negative.
+
+## Sorties produites
+
+### `data/cleaned.csv`
+
+Ce fichier contient le dataset apres nettoyage technique complet.
+
+- `9800` lignes ;
+- plus aucune valeur manquante ;
+- plus de loyers negatifs ;
+- `date_creation_compte` remplacee par `anciennete_compte_jours`.
+
+### `data/ethical_cleaned.csv`
+
+Ce fichier est derive de `cleaned.csv` apres suppression de colonnes jugees trop sensibles ou inutiles pour un usage metier prudent :
+
+- `nom`
+- `prenom`
+- `sexe`
+- `taille`
+- `poids`
+- `nationalité_francaise`
+- `smoker`
+
+Choix retenu : appliquer une logique de minimisation des donnees et reduire le risque de discrimination ou de reidentification.
