@@ -58,21 +58,27 @@ def detect_outliers_iqr(df: pd.DataFrame) -> dict:
     outliers = {}
     num_df = df.select_dtypes(include="number")
 
+    # On boucle sur chaque colonne numerique
     for column in num_df.columns:
+        # On calcule le premier quartile de la colonne
         Q1 = num_df[column].quantile(0.25)
+        # On calcule le troisieme quartile de la colonne
         Q3 = num_df[column].quantile(0.75)
+        # On calcule l’ecart interquartile
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
 
+        # Si les deux bornes sont egales, il n'y a pas de dispersion exploitable
         if lower_bound == upper_bound:
             outliers[column] = {
-                "count": 0,
-                "lower_bound": float(lower_bound),
-                "upper_bound": float(upper_bound),
+                "count": 0,  # nombre outliers
+                "lower_bound": float(lower_bound),  # borne basse
+                "upper_bound": float(upper_bound),  # borne haute
             }
             continue
 
+        # Cree un masque booleen : True pour les valeurs hors bornes
         outlier_mask = (num_df[column] < lower_bound) | (
             num_df[column] > upper_bound)
         outliers[column] = {
@@ -128,6 +134,8 @@ def preprocess_before_imputation(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # On ajuste certaines colonnes apres l'imputation pour avoir des valeurs cohérentes avec le métier
+
+
 def postprocess_after_imputation(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
@@ -143,8 +151,8 @@ def postprocess_after_imputation(df: pd.DataFrame) -> pd.DataFrame:
         df["niveau_etude"] = df["niveau_etude"].astype(int)
         df["niveau_etude"] = df["niveau_etude"].replace(
             EDUCATION_ORDER_REVERSE)
-    
-    # On arrondi l'ancienneté en jours et on interdis les valeurs negatives    
+
+    # On arrondi l'ancienneté en jours et on interdis les valeurs negatives
     if "anciennete_compte_jours" in df.columns:
         df["anciennete_compte_jours"] = df["anciennete_compte_jours"].round().clip(
             lower=0
