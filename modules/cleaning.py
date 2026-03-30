@@ -12,10 +12,6 @@ EDUCATION_ORDER = {
     "doctorat": 6,
 }
 
-EDUCATION_ORDER_REVERSE = {value: key for key,
-                           value in EDUCATION_ORDER.items()}
-
-
 # Calculer le pourcentage de valeurs manquantes pour chaque ligne
 def get_row_missing_percentage(df: pd.DataFrame) -> pd.Series:
     return df.isna().mean(axis=1) * 100
@@ -134,23 +130,18 @@ def preprocess_before_imputation(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 # On ajuste certaines colonnes apres l'imputation pour avoir des valeurs cohérentes avec le métier
-
-
 def postprocess_after_imputation(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     if "historique_credits" in df.columns:
         df["historique_credits"] = df["historique_credits"].round().clip(0, 5)
 
-    # On remets les niveaux d'etudes en texte lisible
     if "niveau_etude" in df.columns:
         df["niveau_etude"] = df["niveau_etude"].round().clip(
-            lower=min(EDUCATION_ORDER_REVERSE),
-            upper=max(EDUCATION_ORDER_REVERSE),
+            lower=min(EDUCATION_ORDER.values()),
+            upper=max(EDUCATION_ORDER.values()),
         )
         df["niveau_etude"] = df["niveau_etude"].astype(int)
-        df["niveau_etude"] = df["niveau_etude"].replace(
-            EDUCATION_ORDER_REVERSE)
 
     # On arrondi l'ancienneté en jours et on interdis les valeurs negatives
     if "anciennete_compte_jours" in df.columns:
@@ -189,6 +180,61 @@ def impute_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     if numeric_columns:
         num_imputer = KNNImputer()
         df[numeric_columns] = num_imputer.fit_transform(df[numeric_columns])
+
+    return df
+
+# Encoder les variables binaires en utilisant un mapping simple (0/1)
+def encode_binary_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    binary_columns = {
+        "sexe": {"f": 0, "h": 1},
+        "sport_licence": {"non": 0, "oui": 1},
+        "smoker": {"non": 0, "oui": 1},
+        "nationalité_francaise": {"non": 0, "oui": 1},
+    }
+
+    for column, mapping in binary_columns.items():
+        if column in df.columns:
+            df[column] = df[column].astype(str).str.strip().str.lower().map(mapping)
+
+    return df
+
+# Encoder les variables nominales en utilisant le one-hot encoding
+def encode_nominal_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    nominal_columns = ["region", "situation_familiale"]
+    existing_columns = [column for column in nominal_columns if column in df.columns]
+
+    if existing_columns:
+        df = pd.get_dummies(df, columns=existing_columns, dtype=int)
+
+    return df
+
+
+def encode_identifier_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    identifier_columns = ["nom", "prenom"]
+
+    for column in identifier_columns:
+        if column in df.columns:
+            codes, _ = pd.factorize(df[column].astype(str).str.strip(), sort=True)
+            df[column] = codes
+
+    return df
+
+
+# Encoder les variables categorielles pour produire un dataset 100% numerique
+def encode_categorical_variables(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df = encode_identifier_columns(df)
+    df = encode_binary_columns(df)
+    df = encode_nominal_columns(df)
+
+    remaining_object_columns = df.select_dtypes(exclude="number").columns.tolist()
+    for column in remaining_object_columns:
+        codes, _ = pd.factorize(df[column].astype(str).str.strip(), sort=True)
+        df[column] = codes
+
     return df
 
 
@@ -206,5 +252,6 @@ def clean_dataset(df: pd.DataFrame) -> pd.DataFrame:
     df = limit_outliers_iqr(df, columns_with_outliers)
     df = impute_missing_values(df)
     df = postprocess_after_imputation(df)
+    df = encode_categorical_variables(df)
 
     return df

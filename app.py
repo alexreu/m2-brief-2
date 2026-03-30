@@ -1,7 +1,10 @@
 import pandas as pd
 
 from modules.analysis import analyse_dataset
-from modules.cleaning import clean_dataset, drop_sensitive_columns
+from modules.cleaning import (
+    clean_dataset,
+    drop_sensitive_columns,
+)
 
 
 def load_data(file_path: str) -> pd.DataFrame:
@@ -29,12 +32,9 @@ def main():
     # Save cleaned dataframe
     clean_df.to_csv("./data/cleaned.csv", index=False)
 
-    # Analyse du dataset après nettoyage
-    analyse_dataset(clean_df)
-
     # Ethical clean dataset
-    drop_sensitive_columns(clean_df).to_csv(
-        "./data/ethical_cleaned.csv", index=False)
+    ethical_df = drop_sensitive_columns(clean_df)
+    ethical_df.to_csv("./data/ethical_cleaned.csv", index=False)
 
 
 if __name__ == "__main__":
